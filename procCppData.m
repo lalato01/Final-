@@ -19,7 +19,7 @@ function orgCpp = procCppData(cppData)
 %   grpPinkPref:xxx
 %   grpBluePref:xxx
 
-%% Importing data: only working section thus far
+%% Importing data & Creating Struct 
 % Select range of data
 rawData = 'E1:AJ37';
 
@@ -30,59 +30,75 @@ cppData(cellfun(@(x) ~isempty(x) && isnumeric(x) && isnan(x),cppData)) = {''};
 % Create ouput argument as a struct, with first field containing subject ID's
 orgCpp.animalID = cppData(1,:)';
 orgCpp.animalID(cellfun('isempty', orgCpp.animalID)) = [];
-% orgCppData = cppData;
 
 % Make matrices for each compartment with the corresponding dimensions
-cppData(1,:)=[]; % Delete first row
+cppData(1,:)=[]; % Delete first row after animal ID's have been stored 
 [secShifts,subjs] = size(cppData);
 orgCpp.sectorMtxs = NaN(secShifts,(subjs/2),2);
-% orgCpp.blueMtx = NaN([secShifts,(subjs/2)]);
+
 % Each column will correspond to one subject and the rows in that column to the amount of compartment shifts.
 % Each cell contains the duration, in seconds, that the animal spent in that compartment before switching.
 
-%% Pseudo-code: Now Functional
+%% Extracting and storing durations(s) into corresponding matrices 
 row = 1;
-col = 1; 
+col = 1;
 pinkMtxRow = 1;
 blueMtxRow = 1;
 pinkMtxCol = 1;
 blueMtxCol = 1;
 % while not at the end of the datasheet
 while row <= secShifts && col <= subjs
+    % If the next row is either numeric or empty, start at the top of the
+    % next column & set corresponding position for storing in appropriate matrix
     if isnumeric(cppData{row,col}) || isempty(cppData{row,col})
         col = col+1;
         row = 1;
-        pinkMtxRow = 1;
-        blueMtxRow = 1;
-        pinkMtxCol = 1;
-        blueMtxCol = 1;
-        % Go to next column of data in corresponding matrix
+        if col > subjs % Break if you've reached the end of the xls
+            break
+        end
+        if pinkMtxRow ~= 1
+            pinkMtxCol = pinkMtxCol + 1;
+            pinkMtxRow = 1;
+            blueMtxRow = 1;
+        elseif blueMtxRow ~= 1
+            blueMtxCol = blueMtxCol + 1;
+            pinkMtxRow = 1;
+            blueMtxRow = 1;
+        end
     end
-    cellElems = strsplit(cppData{row,col},{' ','-','.'});
-    cellElems{2} = str2num(cellElems{2}); % Convert to number (char)
+    cellElems = strsplit(cppData{row,col},{' ','-','.'}); % Parse element data
+    cellElems{2} = str2double(cellElems{2}); % Convert duration to a number
     if numel(cellElems) ~= 2
-        cellElems{3} = str2num(cellElems{3});
-        mins2secs = (cellElems{2} * 60) + cellElems{3}; % Convert minutes and seconds to seconds only
+        if cellElems{3} == ' ' % Error handling- if there's an extra space
+            mins2secs = cellElems{2};
+        else
+            cellElems{3} = str2double(cellElems{3});
+            mins2secs = (cellElems{2} * 60) + cellElems{3};  % If the duration is in minutes, convert to seconds
+        end
     else
-        mins2secs = cellElems{2};
+        mins2secs = cellElems{2}; % Otherwise, keep the seconds
     end
     if cellElems{1} == 'P'
-        % Stores durations in corresponding matrix (1st dimension = pinkMtx) with corresponding row and column 
+        % Store durations in appropriate matrix (1st dimension = pinkMtx), with corresponding row and column
         orgCpp.sectorMtxs(pinkMtxRow,pinkMtxCol,1) = mins2secs;
         pinkMtxRow = pinkMtxRow + 1;
-        pinkMtxCol = pinkMtxCol + 1; 
-    elseif cellElems{1} == 'B'
-        % Stores durations in corresponding matrix (2nd dimension = blueMtx) with corresponding row and column 
+    else
+        cellElems{1} == 'B';
+        % Store durations in appropriate matrix (2nd dimension = blueMtx), with corresponding row and column
         orgCpp.sectorMtxs(blueMtxRow,blueMtxCol,2) = mins2secs;
         blueMtxRow = blueMtxRow + 1;
-        blueMtxCol = blueMtxCol + 1; 
     end
     row = row+1;
-    % Continue to loop until cppData(end)
+    % Continue to loop until the end of cppData
 end
 %%
 % % This will be made into an image matching JNeurosci formatting requirements
 % % In matrix P and B sum the durations of each animal, get total duration per animal, and indv animal compartment percentage
+orgCpp.MtxsColSums = sum(orgCpp.sectorMtxs,'omitnan');
+indvSubj = 1; 
+indvSubjDur = 1:indvSubj:(subjs/2);
+orgCpp.indvTotalDur = orgCpp.MtxsColSums(indvSubj,indvSubjDur,1) + orgCpp.MtxsColSums(indvSubj,indvSubjDur,2); 
+
 % orgCpp.pinkMtxColSums = sum(column-wise addition of col durations: pinkMtx,'omitnan');
 % orgCpp.blueMtxColSums = sum(column-wise addition of col durations: blueMtx,'omitnan');
 % orgCpp.indvTotalDur = sum of corresponding pinkMtxColSums + blueMtxColSums;
