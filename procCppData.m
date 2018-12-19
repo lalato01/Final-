@@ -19,6 +19,8 @@ function orgCpp = procCppData(cppData)
 %   grpPinkPref:xxx
 %   grpBluePref:xxx
 
+% New comment
+
 %% Importing data & Creating Struct 
 % Select range of data
 rawData = 'E1:AJ37';
