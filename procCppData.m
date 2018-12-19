@@ -1,32 +1,26 @@
-function orgCpp = procCppData(cppData)
+% function orgCpp = procCppData(rawCppData)
 %% Help Documentation procCppData
 % The function procCppData takes for an input an excel sheet with stored
 % raw data (from conditioned place preference experiments- CPP) for further processing.
 % The ouput is a struct with several fields containing the animal ID's,
-% matrices with the durations for a specific sector for each animal, and the
-% summation of each animal's durations, as well as their percentage.
+% matrices with the durations for a specific sector for all animals, and the
+% summation of each animal's durations, as well as their percentages.
 % Lastly, it contains a field with the final percentage, indicating what the cohort compartment preference was.
-% E.g. cppData = '_CPP Piloting Trial 1.xlsx'
+rawCppData = '_CPP Piloting Trial 1.xlsx'
 % orgCpp =
 %   animalID:xxx
-%   pinkMtx:xxx
-%   blueMtx:xxx
-%   pinkMtxColSums:xxx
-%   blueMtxColSums:xxx
+%   sectorMtxs:xxx
+%   MtxsColSums:xxx
 %   indvTotalDur:xxx
-%   indvPinkPref:xxx
-%   indvBluePref:xxx
-%   grpPinkPref:xxx
-%   grpBluePref:xxx
+%   indvPref:xxx
+%   grpSectorPref:xxx
 
-% New comment
-
-%% Importing data & Creating Struct 
+%% Importing data & creating struct 
 % Select range of data
 rawData = 'E1:AJ37';
 
 % Obtain all raw data from file
-[~, ~, cppData] = xlsread(cppData,'CPP Format',rawData);
+[~, ~, cppData] = xlsread(rawCppData,'CPP Format',rawData);
 cppData(cellfun(@(x) ~isempty(x) && isnumeric(x) && isnan(x),cppData)) = {''};
 
 % Create ouput argument as a struct, with first field containing subject ID's
@@ -36,12 +30,13 @@ orgCpp.animalID(cellfun('isempty', orgCpp.animalID)) = [];
 % Make matrices for each compartment with the corresponding dimensions
 cppData(1,:)=[]; % Delete first row after animal ID's have been stored 
 [secShifts,subjs] = size(cppData);
-orgCpp.sectorMtxs = NaN(secShifts,(subjs/2),2);
+numSubjs = subjs/2; 
+orgCpp.sectorMtxs = NaN(secShifts,numSubjs,2);
 
 % Each column will correspond to one subject and the rows in that column to the amount of compartment shifts.
 % Each cell contains the duration, in seconds, that the animal spent in that compartment before switching.
 
-%% Extracting and storing durations(s) into corresponding matrices 
+%% Extracting and storing durations (s) into corresponding matrices 
 row = 1;
 col = 1;
 pinkMtxRow = 1;
@@ -85,7 +80,7 @@ while row <= secShifts && col <= subjs
         orgCpp.sectorMtxs(pinkMtxRow,pinkMtxCol,1) = mins2secs;
         pinkMtxRow = pinkMtxRow + 1;
     else
-        cellElems{1} == 'B';
+        cellElems{1} == 'B'
         % Store durations in appropriate matrix (2nd dimension = blueMtx), with corresponding row and column
         orgCpp.sectorMtxs(blueMtxRow,blueMtxCol,2) = mins2secs;
         blueMtxRow = blueMtxRow + 1;
@@ -93,24 +88,36 @@ while row <= secShifts && col <= subjs
     row = row+1;
     % Continue to loop until the end of cppData
 end
-%%
+%% Data Analysis 
 % % This will be made into an image matching JNeurosci formatting requirements
-% % In matrix P and B sum the durations of each animal, get total duration per animal, and indv animal compartment percentage
+% % Sum the durations of each animal, get total duration per animal, and indv animal compartment percentage
 orgCpp.MtxsColSums = sum(orgCpp.sectorMtxs,'omitnan');
-indvSubj = 1; 
-indvSubjDur = 1:indvSubj:(subjs/2);
-orgCpp.indvTotalDur = orgCpp.MtxsColSums(indvSubj,indvSubjDur,1) + orgCpp.MtxsColSums(indvSubj,indvSubjDur,2); 
+indvSubjDur = 1:1:numSubjs;
+orgCpp.indvTotalDur = orgCpp.MtxsColSums(1,indvSubjDur,1) + orgCpp.MtxsColSums(1,indvSubjDur,2); % sum of corresponding pinkMtxColSums + blueMtxColSums
+orgCpp.indvPref = NaN(size(orgCpp.MtxsColSums)); 
+% element wise division ////
+for calSectorPercnt = 1:1:subjs
+    if calSectorPercnt <= 16
+        counter = 1;
+    else
+        counter = 2;
+        if calSectorPercnt == 17
+            row = 1;
+        end 
+    end
+    orgCpp.indvPref(1,row,counter) = (orgCpp.MtxsColSums(1,row,counter)/orgCpp.indvTotalDur(row))*100;
+    row = row + 1; 
+end
+% Get cohort pink vs. blue preference
+dim = 1:1:2;
+orgCpp.grpSectorPref =((sum(orgCpp.MtxsColSums(:,:,dim)))/(sum(orgCpp.indvTotalDur)))*100;
 
-% orgCpp.pinkMtxColSums = sum(column-wise addition of col durations: pinkMtx,'omitnan');
-% orgCpp.blueMtxColSums = sum(column-wise addition of col durations: blueMtx,'omitnan');
-% orgCpp.indvTotalDur = sum of corresponding pinkMtxColSums + blueMtxColSums;
-% orgCpp.indvPinkPref = corresponding (pinkMtxColSums./indvTotalDur)*100;
-% orgCpp.indvBluePref = corresponding (pinkMtxColSums./indvTotalDur)*100;
-% % Sanity check: all new fields created above need to equal the amount of subjects
-% if length(indvPink & BluePref) ~= length(indvTotalDur) ~= length(pink & blueMtxColSums) ~= length(pinkMtx)
-%     warning('Vector elements vary in length: durations not properly obtained')
-% end
-%
-% % Get cohort pink vs. blue preference
-% orgCpp.grpPinkPref = ((sum(orgCpp.pinkMtxColSums))/(sum(orgCpp.indvTotalDur)))*100;
-% orgCpp.grpBluePref = ((sum(orgCpp.blueMtxColSums))/(sum(orgCpp.indvTotalDur)))*100;
+% Sanity check: all new fields created above need to equal the amount of subjects
+if length(orgCpp.animalID) ~= numSubjs && length(orgCpp.MtxsColSums) ~= numSubjs && length(orgCpp.indvTotalDur) ~= numSubjs && length(orgCpp.indvPref) ~= numSubjs
+    warning('Vector elements vary in length: durations not properly obtained')
+end
+% Add subfunctions for each step of this script & help f(x) for ea. 
+% Check if xls file exists (import and opening) 
+% Repeat code 
+% upload to github and tag Bart & katie 
+% Make figure 
